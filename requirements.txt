@@ -1,0 +1,12 @@
+tensorflow
+torch
+torchvision
+numpy
+matplotlib
+scikit-learn
+jupyter
+fastapi
+uvicorn
+cdsapi
+xarray
+netCDF4

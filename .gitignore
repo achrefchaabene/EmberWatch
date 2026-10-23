@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Local data downloads and generated training datasets are not versioned.
+data/raw/
+data/processed/
+*.nc
+*.zip
+
+# Model weights are published separately from the source repository.
+artifacts/*.keras
