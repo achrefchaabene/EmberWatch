@@ -27,3 +27,8 @@ TEST_END = "2025-12-31"
 # Target grid used when all source layers are rasterised and aligned.
 TARGET_CRS = "EPSG:4326"
 TARGET_RESOLUTION_DEGREES = 0.01  # approximately 1 km in Tunisia
+
+# First Tunisia training cube: keep the ERA5 0.25-degree cells.  This avoids
+# pretending that coarse weather has 1-km precision and keeps the first local
+# experiment compact enough to train and audit on an ordinary computer.
+ERA5_GRID_RESOLUTION_DEGREES = 0.25
