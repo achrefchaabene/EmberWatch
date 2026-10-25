@@ -10,3 +10,4 @@ uvicorn
 cdsapi
 xarray
 netCDF4
+rasterio

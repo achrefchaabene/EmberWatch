@@ -1,0 +1,36 @@
+{
+  "model": "tunisia_era5_weather_cnn",
+  "features": [
+    "prev_fire_mask",
+    "temperature_mean_c",
+    "temperature_max_c",
+    "temperature_min_c",
+    "relative_humidity_mean_pct",
+    "wind_u_mean_mps",
+    "wind_v_mean_mps",
+    "wind_speed_mean_mps",
+    "wind_speed_max_mps",
+    "precipitation_sum_mm",
+    "elevation_m",
+    "coarse_slope_degrees"
+  ],
+  "grid": {
+    "height": 32,
+    "width": 18,
+    "resolution": "0.25 degrees"
+  },
+  "training_period": "2019-01-01 to 2022-12-31",
+  "validation_period": "2023-01-01 to 2023-12-31",
+  "test_period": "2024-01-01 to 2025-12-30",
+  "threshold_selected_on_validation": 0.9180876016616821,
+  "positive_weight": 30.0,
+  "test": {
+    "average_precision": 0.3626971584487905,
+    "f1": 0.38573866868955053,
+    "precision": 0.4454664914586071,
+    "recall": 0.34013377926421406,
+    "best_f1_oracle": 0.3923444976071573,
+    "positive_rate": 0.007110920852359208
+  },
+  "caveat": "First coarse ERA5-grid baseline. FIRMS active-fire detections are not burned-area perimeters."
+}

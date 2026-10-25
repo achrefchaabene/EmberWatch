@@ -24,6 +24,9 @@ from configs.tunisia import TEST_END, TRAIN_START
 
 FIRMS_PATH = PROJECT_ROOT / "data" / "processed" / "tunisia" / "firms_viirs_tunisia.csv"
 ERA5_DAILY_DIR = PROJECT_ROOT / "data" / "processed" / "tunisia" / "era5_daily"
+TERRAIN_PATH = PROJECT_ROOT / "data" / "processed" / "tunisia" / "terrain_era5_025.nc"
+WORLDCOVER_PATH = PROJECT_ROOT / "data" / "processed" / "tunisia" / "worldcover_2021_era5_025.nc"
+BOUNDARY_PATH = PROJECT_ROOT / "data" / "processed" / "tunisia" / "tunisia_boundary_fraction_era5_025.nc"
 DEFAULT_OUTPUT = PROJECT_ROOT / "data" / "processed" / "tunisia" / "tunisia_fire_weather_cube_era5_025.nc"
 
 
@@ -77,6 +80,24 @@ def rasterise_firms(days: np.ndarray, latitudes: np.ndarray, longitudes: np.ndar
 def main() -> None:
     args = parse_arguments()
     weather = open_daily_era5().load()
+    if not TERRAIN_PATH.exists():
+        raise FileNotFoundError(
+            f"Terrain features not found: {TERRAIN_PATH}. Run build_tunisia_terrain_features.py first."
+        )
+    terrain = xr.open_dataset(TERRAIN_PATH).load()
+    if not WORLDCOVER_PATH.exists():
+        raise FileNotFoundError(
+            f"WorldCover features not found: {WORLDCOVER_PATH}. Run build_tunisia_worldcover_features.py first."
+        )
+    worldcover = xr.open_dataset(WORLDCOVER_PATH).load()
+    if not BOUNDARY_PATH.exists():
+        raise FileNotFoundError(
+            f"Tunisia boundary mask not found: {BOUNDARY_PATH}. Run build_tunisia_boundary_mask.py first."
+        )
+    boundary = xr.open_dataset(BOUNDARY_PATH).load()
+    _, terrain = xr.align(weather.isel(valid_time=0, drop=True), terrain, join="exact")
+    _, worldcover = xr.align(weather.isel(valid_time=0, drop=True), worldcover, join="exact")
+    _, boundary = xr.align(weather.isel(valid_time=0, drop=True), boundary, join="exact")
     days = weather.valid_time.values.astype("datetime64[D]")
     latitudes = weather.latitude.values
     longitudes = weather.longitude.values
@@ -94,6 +115,7 @@ def main() -> None:
         next_fire_mask=(("valid_time", "latitude", "longitude"), next_fire_mask),
         target_is_available=(("valid_time",), target_is_available),
     )
+    cube = xr.merge([cube, terrain, worldcover, boundary])
     cube["firms_detection_count"].attrs.update(description="Number of accepted FIRMS VIIRS detections in the ERA5 cell on this date")
     cube["prev_fire_mask"].attrs.update(description="1 when an accepted FIRMS detection occurs in this cell on day t")
     cube["next_fire_mask"].attrs.update(description="1 when an accepted FIRMS detection occurs in this cell on day t plus 1")
@@ -104,7 +126,10 @@ def main() -> None:
         spatial_resolution="0.25 degrees native ERA5 grid",
         temporal_coverage=f"{TRAIN_START} through {TEST_END}",
         fire_source="NASA FIRMS VIIRS S-NPP accepted nominal/high confidence detections",
-        caveat="FIRMS active-fire detections are not burned-area perimeters; ERA5 weather is coarse at about 25 km.",
+        terrain_source="AWS Terrain Tiles SRTM HGT sampled at ERA5 cell centres",
+        landcover_source="ESA WorldCover 2021 v200 class fractions aggregated to the ERA5 grid",
+        boundary_source="Natural Earth Admin 0 country boundary; training/evaluation use cells at least 50 percent inside Tunisia.",
+        caveat="FIRMS active-fire detections are not burned-area perimeters; ERA5 weather and terrain features are coarse at about 25 km.",
     )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -116,6 +141,7 @@ def main() -> None:
     print(f"Accepted FIRMS detections rasterised: {accepted_detections:,}")
     print(f"Active fire cell-days: {int(fire_mask.sum()):,}")
     print(f"Target positive cell-days: {int(next_fire_mask[:-1].sum()):,}")
+    print("Static features added: terrain and ESA WorldCover class fractions")
     print(f"Train dates: {TRAIN_START} to 2023-12-31")
     print(f"Test dates: 2024-01-01 to {TEST_END}")
     print(f"Saved: {args.output}")

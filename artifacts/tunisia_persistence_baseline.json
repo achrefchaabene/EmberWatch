@@ -1,0 +1,20 @@
+{
+  "model": "tunisia_persistence_baseline",
+  "split": "test 2024-01-01 to 2025-12-30",
+  "grid": {
+    "latitude_cells": 32,
+    "longitude_cells": 18
+  },
+  "valid_pixel_days": 420480,
+  "positive_pixel_days": 2990,
+  "fire_rate": 0.007110920852359208,
+  "average_precision": 0.13930805817650466,
+  "fixed_threshold": 0.5,
+  "f1_at_fixed_threshold": 0.36716268182578166,
+  "precision_at_fixed_threshold": 0.36710130391173523,
+  "recall_at_fixed_threshold": 0.36722408026755854,
+  "best_f1": 0.36716268182528167,
+  "best_threshold": 1.0,
+  "definition": "Predict next-day fire mask using the current-day FIRMS fire mask.",
+  "caveat": "Evaluation uses the full buffered ERA5 rectangle; a Tunisia land mask will be added in a later refinement."
+}

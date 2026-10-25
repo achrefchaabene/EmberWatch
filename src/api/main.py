@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 FORECAST_PATH = PROJECT_ROOT / "artifacts" / "forecast_sample.json"
+TUNISIA_FORECAST_PATH = PROJECT_ROOT / "artifacts" / "tunisia_forecast_latest.json"
 
 app = FastAPI(title="EmberWatch Forecast API", version="1.0.0")
 app.add_middleware(
@@ -115,4 +116,17 @@ def latest_forecast() -> dict:
         )
 
     with FORECAST_PATH.open(encoding="utf-8") as forecast_file:
+        return json.load(forecast_file)
+
+
+@app.get("/api/v1/forecast/tunisia/latest")
+def latest_tunisia_forecast() -> dict:
+    """Return the latest geographic Tunisia forecast replay for the dashboard."""
+    if not TUNISIA_FORECAST_PATH.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="No Tunisia forecast found. Run scripts/export_tunisia_geoforecast.py first.",
+        )
+
+    with TUNISIA_FORECAST_PATH.open(encoding="utf-8") as forecast_file:
         return json.load(forecast_file)
