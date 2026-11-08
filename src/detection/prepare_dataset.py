@@ -19,6 +19,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import random
 import re
@@ -158,26 +159,108 @@ def split_dfire(samples: list[Sample], val: float, seed: int) -> dict[str, list[
 
 
 # ---------------------------------------------------------------------- write
-def write_split(split: str, samples: list[Sample], smoke_id: int, out: Path, copy: bool) -> Counter:
-    """Write images (symlink or copy) and smoke-only labels; return box/image counts."""
-    stats: Counter = Counter()
+def clean_box(row: list[str]) -> list[str] | None:
+    """Validate one YOLO row; clip slightly-out-of-range boxes, drop impossible ones."""
+    try:
+        x, y, w, h = map(float, row[1:5])
+    except ValueError:
+        return None
+    # Convert to corners, clip to the image, convert back (annotation tools often overshoot by 1px).
+    x1, y1, x2, y2 = max(0.0, x - w / 2), max(0.0, y - h / 2), min(1.0, x + w / 2), min(1.0, y + h / 2)
+    if x2 - x1 < 1e-4 or y2 - y1 < 1e-4:
+        return None  # zero-area or fully outside: noise for the loss
+    return [row[0], f"{(x1 + x2) / 2:.6f}", f"{(y1 + y2) / 2:.6f}", f"{x2 - x1:.6f}", f"{y2 - y1:.6f}"]
+
+
+def readable(image: Path) -> bool:
+    """True if PIL can decode the image (corrupt files crash training workers)."""
+    from PIL import Image
+
+    try:
+        with Image.open(image) as im:
+            im.verify()
+        return True
+    except Exception:  # noqa: BLE001 - any decode failure means unusable
+        return False
+
+
+def write_image(src: Path, dst: Path, copy: bool, max_side: int | None) -> None:
+    """Symlink, copy, or resize-copy one image. YOLO labels are normalised, so resizing keeps them valid."""
+    if max_side:
+        from PIL import Image
+
+        with Image.open(src) as im:
+            if max(im.size) > max_side:
+                im = im.convert("RGB")
+                im.thumbnail((max_side, max_side), Image.LANCZOS)  # LANCZOS: sharpest downscale
+                im.save(dst.with_suffix(".jpg"), quality=95)
+                return
+    if copy or max_side:
+        shutil.copy2(src, dst)
+    else:
+        dst.symlink_to(src.resolve())
+
+
+def write_split(split: str, samples: list[Sample], smoke_id: int, out: Path, copy: bool,
+                max_side: int | None = None) -> Counter:
+    """Write cleaned images + smoke-only labels; return counts (incl. what was dropped)."""
+    stats: Counter = Counter(images=0, boxes=0, negatives=0)
     (out / "images" / split).mkdir(parents=True, exist_ok=True)
     (out / "labels" / split).mkdir(parents=True, exist_ok=True)
     for s in samples:
+        if not readable(s.image):
+            stats["dropped_corrupt_images"] += 1
+            continue
         name = f"{s.source}__{s.image.stem}"
         dst_img = out / "images" / split / f"{name}{s.image.suffix.lower()}"
-        if not dst_img.exists():
-            if copy:
-                shutil.copy2(s.image, dst_img)
+        if not dst_img.exists() and not dst_img.with_suffix(".jpg").exists():
+            write_image(s.image, dst_img, copy, max_side)
+        # Keep only smoke boxes, remap to class 0, clean coordinates.
+        smoke_rows = []
+        for r in read_labels(s.label):
+            if int(r[0]) != smoke_id:
+                continue
+            fixed = clean_box(["0", *r[1:]])
+            if fixed is None:
+                stats["dropped_invalid_boxes"] += 1
             else:
-                dst_img.symlink_to(s.image.resolve())
-        # Keep only smoke boxes and remap them to class 0.
-        smoke_rows = [["0", *r[1:]] for r in read_labels(s.label) if int(r[0]) == smoke_id]
+                smoke_rows.append(fixed)
         (out / "labels" / split / f"{name}.txt").write_text("".join(" ".join(r) + "\n" for r in smoke_rows))
         stats["images"] += 1
         stats["boxes"] += len(smoke_rows)
         stats["negatives"] += int(not smoke_rows)
     return stats
+
+
+def file_md5(path: Path) -> str:
+    """Content fingerprint: two files with the same bytes = the same image, whatever their names."""
+    h = hashlib.md5()
+    with open(path, "rb") as fh:
+        for block in iter(lambda: fh.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def drop_cross_split_duplicates(merged: dict[str, list]) -> dict[str, int]:
+    """Remove from val/test any image whose CONTENT already exists in an earlier split.
+
+    Names and event ids cannot catch a copied file; a byte-identical image in test
+    means the model was trained on its own test image (inflated score).
+    Order of priority: train keeps everything, then val, then test.
+    """
+    seen: set[str] = set()
+    removed = {"val": 0, "test": 0}
+    for split in ("train", "val", "test"):
+        kept = []
+        for sample, sid in merged[split]:
+            digest = file_md5(sample.image)
+            if split != "train" and digest in seen:
+                removed[split] += 1
+                continue
+            seen.add(digest)
+            kept.append((sample, sid))
+        merged[split] = kept
+    return removed
 
 
 def leakage_report(splits: dict[str, list[Sample]]) -> dict:
@@ -193,7 +276,8 @@ def leakage_report(splits: dict[str, list[Sample]]) -> dict:
     return report
 
 
-def build(dfire: Path | None, hpwren: Path | None, out: Path, val: float, test: float, seed: int, copy: bool) -> dict:
+def build(dfire: Path | None, hpwren: Path | None, out: Path, val: float, test: float, seed: int, copy: bool,
+          max_side: int | None = None) -> dict:
     """Build the merged dataset and return the report written to split_report.json."""
     if not dfire and not hpwren:
         raise ValueError("Give at least one source (--dfire and/or --hpwren).")
@@ -204,9 +288,15 @@ def build(dfire: Path | None, hpwren: Path | None, out: Path, val: float, test: 
     if dfire:
         samples = collect_samples(dfire, "dfire")
         smoke_id, per_class = detect_smoke_class(samples)
+        yaml_id = smoke_class_from_yaml(dfire)
+        if yaml_id is not None and yaml_id != smoke_id:
+            # Two independent sources disagree: stop instead of training a fire detector by mistake.
+            raise SystemExit(f"D-Fire smoke class mismatch: data.yaml says {yaml_id}, counts say {smoke_id}. "
+                             "Open the data.yaml and a few label files to decide.")
         report["sources"]["dfire"] = {
             "images": len(samples),
             "smoke_class_id": smoke_id,
+            "smoke_class_id_from_yaml": yaml_id,
             "images_per_class": per_class,
             "expected_from_readme": {"smoke": DFIRE_SMOKE_IMAGES, "fire": DFIRE_FIRE_IMAGES},
         }
@@ -226,11 +316,12 @@ def build(dfire: Path | None, hpwren: Path | None, out: Path, val: float, test: 
         for k, v in group_split(samples, val, test, seed).items():
             merged[k] += [(s, smoke_id) for s in v]
 
+    report["removed_cross_split_duplicates"] = drop_cross_split_duplicates(merged)
     report["splits"] = {}
     for split, pairs in merged.items():
-        stats: Counter = Counter()
+        stats = Counter(images=0, boxes=0, negatives=0)
         for s, sid in pairs:
-            stats += write_split(split, [s], sid, out, copy)
+            stats.update(write_split(split, [s], sid, out, copy, max_side))  # update keeps zero counts
         report["splits"][split] = dict(stats)
 
     report["leakage"] = leakage_report({k: [s for s, _ in v] for k, v in merged.items()})
@@ -251,8 +342,10 @@ def main() -> None:
     parser.add_argument("--test", type=float, default=0.1, help="HPWREN test fraction (of events)")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--copy", action="store_true", help="copy images instead of symlinking (Windows)")
+    parser.add_argument("--max-side", type=int, default=None,
+                        help="resize images whose long side is larger (only if the EDA recommends it)")
     args = parser.parse_args()
-    report = build(args.dfire, args.hpwren, args.out, args.val, args.test, args.seed, args.copy)
+    report = build(args.dfire, args.hpwren, args.out, args.val, args.test, args.seed, args.copy, args.max_side)
     print(json.dumps(report, indent=2))
     if not report["leakage"]["leakage_free"]:
         raise SystemExit("LEAKAGE DETECTED: see split_report.json")

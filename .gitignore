@@ -15,3 +15,7 @@ artifacts/*.keras
 # M2 detection: training runs and weights are not versioned
 runs/
 *.pt
+
+# Generated on Kaggle by the notebook (EDA-adjusted copy of m2_yolo.yaml)
+configs/m2_yolo_kaggle.yaml
+artifacts/eda*/

@@ -125,19 +125,21 @@ data/raw/hpwren_smoke/  train/..., valid/..., test/..., data.yaml   (export Robo
 Ouvre `notebooks/02_m2_train_yolo_kaggle.ipynb` sur Kaggle. Réglages : Accelerator **GPU T4 x2** ou **P100**, Internet **On**. La commande principale du notebook :
 
 ```bash
-python -m src.detection.train --data /kaggle/working/m2_smoke/data.yaml --model yolov8s.pt --epochs 50 --imgsz 640 --batch 16 --device 0
+python -m src.detection.train --data /kaggle/working/m2_smoke/data.yaml --config configs/m2_yolo_kaggle.yaml --device 0
 ```
 
 - **Ce que ça fait :** part d'un YOLOv8s **déjà entraîné sur COCO** et l'adapte à la fumée (*fine-tuning*). Sauvegarde le meilleur modèle dans `runs/m2/yolo_smoke/weights/best.pt`.
-- **Chaque paramètre :**
-  - `--model yolov8s.pt` : taille *small*, bon compromis vitesse / précision, tient sur un GPU de 16 Go.
-  - `--epochs 50` + `patience=15` (dans le code) : s'arrête tout seul si le mAP de validation ne progresse plus pendant 15 epochs → pas de temps GPU gaspillé.
-  - `--imgsz 640` : taille standard de YOLO, et la même que la taille des tuiles SAHI à l'inférence (cohérence entraînement / inférence).
-  - `--batch 16` : tient en mémoire sur un T4 ; à baisser à 8 si erreur « CUDA out of memory ».
-  - `seed=42`, `deterministic=True` : même résultat si on relance (CDC : reproductibilité).
-  - `copy_paste=0.1` : colle des panaches de fumée sur d'autres scènes → plus de variété.
-  - `flipud=0.0` : **jamais** de retournement vertical, car la fumée monte ; une fumée à l'envers n'existe pas.
-  - `fliplr=0.5` : le retournement gauche-droite reste réaliste.
+- **Tous les hyperparamètres sont dans `configs/m2_yolo.yaml`**, chacun commenté (valeur, raison, alternative refusée). Le notebook en fait une copie `m2_yolo_kaggle.yaml` ajustée par l'étude des données (EDA). Les principaux :
+  - `yolov8s.pt` : taille *small*, bon compromis vitesse / précision, tient sur un GPU de 16 Go.
+  - `epochs: 100` + `patience: 20` : 100 est un plafond ; l'entraînement s'arrête seul si le mAP de validation ne progresse plus pendant 20 epochs.
+  - `imgsz: 640` : même taille que les tuiles SAHI à l'inférence (cohérence entraînement / inférence).
+  - `batch: 32` : tient sur un T4 avec la précision mixte ; à baisser à 16 si erreur « CUDA out of memory ».
+  - `optimizer: SGD` fixé : `auto` pourrait changer d'optimiseur d'une ablation à l'autre.
+  - `seed: 42`, `deterministic: true` : même résultat si on relance (CDC : reproductibilité).
+  - `copy_paste: 0` : **sans effet** sur des boîtes (Ultralytics l'ignore sans masques de segmentation — vérifié dans son code).
+  - `flipud: 0` : **jamais** de retournement vertical, car la fumée monte ; `degrees: 0` : caméras à l'horizontale.
+  - `fliplr: 0.5` : le retournement gauche-droite reste réaliste.
+- **Raisonnement complet** (filtres appliqués / refusés, chaque hyperparamètre) : [M2_DONNEES_ET_ENTRAINEMENT.md](M2_DONNEES_ET_ENTRAINEMENT.md).
 
 | Choix | Pourquoi | Pourquoi pas l'autre option |
 |---|---|---|

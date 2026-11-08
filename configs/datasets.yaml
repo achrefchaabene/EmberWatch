@@ -1,0 +1,58 @@
+# EmberWatch — dataset registry (single place for every dataset link).
+# Used by:  python -m src.detection.download --only dfire hpwren_smoke
+#
+# Supported sources:
+#   kaggle    -> kagglehub (on Kaggle: uses the attached /kaggle/input copy if present)
+#   roboflow  -> Roboflow SDK, needs ROBOFLOW_API_KEY (env var or Kaggle Secret)
+#   http      -> any direct URL (zip / tgz / tar / file), e.g. HPWREN FIgLib
+#   gdrive    -> Google Drive file or folder link (gdown)
+#   github    -> git clone --depth 1 of a repository
+#   onedrive  -> OneDrive *file* share link (folders are not supported by OneDrive's API)
+#
+# Never put API keys in this file: it is versioned in git.
+
+datasets:
+  # ------------------------------------------------------------------ M2 (Mouhib)
+  dfire:
+    description: D-Fire — ~21k images, YOLO boxes for smoke and fire (official train/val/test split)
+    used_for: M2 training + test
+    source: kaggle
+    handle: sayedgamal99/smoke-fire-detection-yolo   # Kaggle copy listed in the official README
+    kaggle_input: /kaggle/input/smoke-fire-detection-yolo
+    official_page: https://github.com/gaiasd/DFireDataset
+    official_download: https://1drv.ms/f/c/c0bd25b6b048b01d/Ema8FFze8mFIlM1Hn81BUUgBE3vnnmK4SQxybS-nHRt2pA?e=6rk0aN
+    licence: see official page (cite the D-Fire paper)
+
+  hpwren_smoke:
+    description: AI For Mankind / HPWREN tower-camera frames with smoke boxes (same cameras as FIgLib)
+    used_for: M2 training + test (target domain)
+    source: roboflow
+    workspace: brad-dwyer
+    project: wildfire-smoke
+    version: 1
+    format: yolov8
+    official_page: https://public.roboflow.com/object-detection/wildfire-smoke
+    licence: see Roboflow page (cite AI For Mankind + HPWREN)
+
+  figlib_sample:
+    description: 3 FIgLib ignition sequences (~40 min before/after ignition, ~1 frame/min) for early tests
+    used_for: M2 frame-level test, M3 development (full FIgLib = Ghofrane, M1)
+    source: http
+    base_url: https://cdn.hpwren.ucsd.edu/HPWREN-FIgLib-Data/Tar/
+    # Copy 3 names from https://cdn.hpwren.ucsd.edu/HPWREN-FIgLib-Data/Tar/index.html
+    files: []
+    extract: true
+    official_page: https://www.hpwren.ucsd.edu/FIgLib/
+    licence: https://www.hpwren.ucsd.edu/cc.html (attribution to https://www.hpwren.ucsd.edu/)
+
+  # --------------------------------------------------- Other members (for reference)
+  ndws:
+    description: Next Day Wildfire Spread (Achref, M6)
+    source: kaggle
+    handle: fantineh/next-day-wildfire-spread
+    kaggle_input: /kaggle/input/next-day-wildfire-spread
+
+  mesogeos:
+    description: Mesogeos code + download instructions (Achref, Stage 2)
+    source: github
+    url: https://github.com/Orion-AI-Lab/mesogeos

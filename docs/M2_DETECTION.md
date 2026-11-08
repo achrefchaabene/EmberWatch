@@ -20,9 +20,12 @@ frame (any resolution)
 
 | File | Role |
 |---|---|
+| `configs/datasets.yaml` + `src/detection/download.py` | Every dataset link in one place; download from Kaggle, Roboflow, HTTP, Drive, GitHub, OneDrive |
+| `src/detection/eda.py` | Dataset study → data-driven preprocessing / augmentation decisions |
+| `configs/m2_yolo.yaml` | Hyperparameters and augmentations, each one explained |
 | `src/detection/contract.py` | `Detection`, `Alert` (CDC §8.1), tile ids on a 224 px grid |
 | `src/detection/prepare_dataset.py` | D-Fire + HPWREN → smoke-only YOLO dataset, event-level split, leakage report |
-| `src/detection/train.py` | YOLO fine-tuning (seeded, early stopping, copy-paste augmentation, no vertical flip) |
+| `src/detection/train.py` | YOLO fine-tuning from `configs/m2_yolo.yaml`, custom Albumentations, `--resume` |
 | `src/detection/evaluate.py` | mAP@0.5 on the **test** split + latency with/without tiling → `artifacts/m2_metrics.json` |
 | `src/detection/detector.py` | `SmokeDetector`: YOLO + SAHI inference used by the API |
 | `src/api/detection_routes.py` | `POST /api/v1/detect`, `GET /api/v1/alerts` |
@@ -30,6 +33,9 @@ frame (any resolution)
 | `tests/test_detection_*.py`, `tests/test_prepare_dataset.py` | Contract, dataset builder and API tests (no GPU / weights needed) |
 
 ## Design choices
+
+Full reasoning (filters used / refused, hyperparameters): [M2_DONNEES_ET_ENTRAINEMENT.md](M2_DONNEES_ET_ENTRAINEMENT.md).
+
 
 - **Smoke only.** D-Fire images with fire but no smoke are kept as negatives (empty labels).
 - **Smoke class id is inferred, not hard-coded.** The D-Fire README gives image counts
@@ -39,7 +45,8 @@ frame (any resolution)
   names) before splitting. D-Fire keeps its official test split for comparability.
   `prepare_dataset` exits with an error if any event or image crosses splits.
 - **Test split for reported numbers.** Validation is only used for early stopping.
-- **No vertical flip** in augmentation: smoke rises, a flipped plume is unrealistic.
+- **No vertical flip / rotation / mixup** in augmentation: smoke rises, tower cameras are levelled, blended images look like smoke.
+- **copy_paste is not used**: Ultralytics ignores it without segmentation masks (boxes only here).
 - **Human in the loop.** Every alert is `PENDING_CONFIRMATION` (principle P1).
 
 ## How to run

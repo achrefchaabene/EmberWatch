@@ -17,3 +17,8 @@ pillow
 pydantic>=2
 python-multipart
 pytest
+pyyaml
+albumentations
+kagglehub
+roboflow
+gdown

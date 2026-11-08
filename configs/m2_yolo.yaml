@@ -1,0 +1,74 @@
+# EmberWatch M2 — YOLO smoke detector, baseline hyperparameters (Kaggle GPU T4 / P100).
+# Every value is explained; change ONE value per ablation and keep the rest fixed.
+# CLI flags of src.detection.train override this file (e.g. --epochs 3 for a quick test).
+
+# ----------------------------------------------------------------- model & data
+model: yolov8s.pt        # COCO-pretrained "small": best speed/accuracy trade-off for 16 GB GPUs,
+                         # most cited version in smoke papers -> comparable baseline.
+                         # n = too weak for faint smoke, m/l = 2-4x slower for a few mAP points.
+single_cls: true         # one class (smoke); avoids any class-confusion loss.
+imgsz: 640               # = SAHI tile size at inference: the model sees objects at the same scale
+                         # in training and inference. 960/1024 = ablation if EDA shows many small boxes.
+
+# ----------------------------------------------------------------- schedule
+epochs: 100              # upper bound; early stopping decides the real length.
+patience: 20             # stop if val mAP does not improve for 20 epochs (saves GPU quota).
+# time: NOT used on purpose. In Ultralytics, 'time' RE-COMPUTES epochs to fill the whole budget
+# (epochs = time*3600 / epoch_duration): runs would not be comparable between ablations.
+# Safety net for Kaggle's 12 h limit = save_period + `--resume` (see train.py).
+save_period: 5           # checkpoint every 5 epochs -> resume after a disconnection.
+batch: 32                # fits a T4 (16 GB) with yolov8s @640 + AMP; use 16 if "CUDA out of memory".
+workers: 4               # Kaggle gives 4 CPU cores; more workers = no gain, more RAM.
+cache: false             # D-Fire @640 in RAM ≈ 20 GB > safe Kaggle RAM; disk cache fills /kaggle/working.
+amp: true                # mixed precision: ~2x faster, half memory, no accuracy loss on T4.
+
+# ----------------------------------------------------------------- optimiser
+optimizer: SGD           # fixed on purpose: 'auto' switches SGD <-> AdamW with the number of
+                         # iterations, so two ablations could silently use different optimisers.
+lr0: 0.01                # standard SGD start LR for fine-tuning YOLO.
+lrf: 0.01                # final LR = lr0 * lrf (decays 100x).
+cos_lr: true             # cosine decay: smoother end of training than linear, small mAP gain.
+momentum: 0.937
+weight_decay: 0.0005     # mild L2 regularisation (default, works for most datasets).
+warmup_epochs: 3         # small LR at the start so the pretrained weights are not destroyed.
+
+# ----------------------------------------------------------------- loss weights (defaults kept)
+box: 7.5                 # localisation weight (smoke boxes are fuzzy; we do not over-weight it)
+cls: 0.5                 # classification weight (single class -> mostly objectness vs background)
+dfl: 1.5                 # distribution focal loss for box edges
+
+# ----------------------------------------------------------------- geometric augmentation
+mosaic: 1.0              # 4 images in one: more small objects + varied backgrounds per batch.
+close_mosaic: 10         # mosaic OFF for the last 10 epochs: finish on realistic full frames.
+scale: 0.5               # zoom 0.5x-1.5x: smoke seen near and far.
+translate: 0.1           # small shifts: plume is not always centred.
+fliplr: 0.5              # mirror left/right: a mirrored landscape is still realistic.
+flipud: 0.0              # NEVER upside down: smoke rises, sky is on top.
+degrees: 0.0             # NO rotation: tower cameras are levelled; a tilted horizon never happens.
+shear: 0.0               # NO shear / perspective: fixed cameras, unrealistic distortions.
+perspective: 0.0
+mixup: 0.0               # NO mixup: blending two photos creates semi-transparent ghost shapes that
+                         # look exactly like smoke -> label noise. Possible ablation later.
+cutmix: 0.0
+copy_paste: 0.0          # has NO effect without segmentation masks (D-Fire only has boxes).
+
+# ----------------------------------------------------------------- photometric augmentation (HSV)
+hsv_h: 0.01              # tiny hue shift: smoke is grey/white/brown; big hue shifts create
+                         # unrealistic skies and could turn grey smoke into "coloured" blobs.
+hsv_s: 0.5               # saturation: haze and dusk reduce colours.
+hsv_v: 0.4               # brightness: morning / noon / dusk.
+
+# ----------------------------------------------------------------- Albumentations (pixel-level)
+# Applied by src/detection/train.py (Ultralytics' default Albumentations are replaced).
+# Probabilities are LOW on purpose: they teach robustness without erasing faint smoke.
+albumentations:
+  to_gray: 0.10          # mono / IR tower cameras exist; set from EDA grayscale_share.
+  brightness_contrast: 0.20   # ±0.2 lighting changes.
+  jpeg_compression: 0.20      # quality 60-100: camera streams are JPEG-compressed.
+  gauss_noise: 0.05           # sensor noise at low light (very light).
+  blur: 0.05                  # kernel 3 only: slight defocus/haze; strong blur erases thin smoke.
+  clahe: 0.0                  # OFF by default -> ablation (boosts local contrast of smoke AND clouds).
+
+# ----------------------------------------------------------------- reproducibility
+seed: 42
+deterministic: true

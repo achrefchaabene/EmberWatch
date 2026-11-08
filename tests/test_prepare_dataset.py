@@ -1,7 +1,11 @@
 """Tests for the M2 dataset builder on a tiny synthetic D-Fire + HPWREN layout."""
 
 import json
+import zlib
 from pathlib import Path
+
+import numpy as np
+from PIL import Image
 
 from src.detection.prepare_dataset import build, event_key
 
@@ -10,7 +14,10 @@ def _write(root: Path, split: str, name: str, rows: list[str]) -> None:
     """Create one fake image + YOLO label file."""
     (root / split / "images").mkdir(parents=True, exist_ok=True)
     (root / split / "labels").mkdir(parents=True, exist_ok=True)
-    (root / split / "images" / f"{name}.jpg").write_bytes(b"fake")
+    # Real, distinct images: the builder now drops undecodable files and byte-identical copies.
+    rng = np.random.default_rng(zlib.crc32(name.encode()))  # unique, reproducible pixels per name
+    img = Image.fromarray(rng.integers(0, 256, (32, 32, 3), dtype=np.uint8))
+    img.save(root / split / "images" / f"{name}.png")
     (root / split / "labels" / f"{name}.txt").write_text("\n".join(rows))
 
 
