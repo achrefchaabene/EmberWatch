@@ -85,3 +85,16 @@ Open `http://127.0.0.1:8000/` for the built-in visual forecast dashboard.
 
 The Kaggle records have no geographic coordinates. The real Tunisia training
 pipeline and the first data-acquisition command are in [the Tunisia pipeline guide](docs/TUNISIA_PIPELINE.md).
+
+## EmberWatch M2 - Smoke detection (YOLO + SAHI)
+
+Frame-level smoke detector for tower-camera images, served by the same API:
+`POST /api/v1/detect` (upload a frame) and `GET /api/v1/alerts`.
+Training runs on Kaggle with `notebooks/02_m2_train_yolo_kaggle.ipynb`.
+Details, commands and design choices: [the M2 guide](docs/M2_DETECTION.md) · step-by-step explained guide in French: [M2_GUIDE_EXPLIQUE](docs/M2_GUIDE_EXPLIQUE.md).
+
+Run the tests from the project root:
+
+```cmd
+.venv\Scripts\python.exe -m pytest tests -q
+```

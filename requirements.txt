@@ -10,3 +10,15 @@ uvicorn
 cdsapi
 xarray
 netCDF4
+# M2 smoke detection (Mouhib)
+ultralytics
+sahi
+pillow
+pydantic>=2
+python-multipart
+pytest
+pyyaml
+albumentations
+kagglehub
+roboflow
+gdown

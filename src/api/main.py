@@ -9,6 +9,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.api.detection_routes import router as detection_router
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 FORECAST_PATH = PROJECT_ROOT / "artifacts" / "forecast_sample.json"
@@ -17,9 +19,11 @@ app = FastAPI(title="EmberWatch Forecast API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Tighten this to the dashboard domain before deployment.
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],  # POST: M2 frame upload
     allow_headers=["*"],
 )
+
+app.include_router(detection_router)  # M2 smoke detection (Mouhib)
 
 
 DASHBOARD_HTML = """<!doctype html>
