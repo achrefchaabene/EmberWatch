@@ -11,3 +11,7 @@ data/processed/
 
 # Model weights are published separately from the source repository.
 artifacts/*.keras
+
+# M2 detection: training runs and weights are not versioned
+runs/
+*.pt
