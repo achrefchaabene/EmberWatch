@@ -18,7 +18,9 @@ datasets:
     used_for: M2 training + test
     source: kaggle
     handle: sayedgamal99/smoke-fire-detection-yolo   # Kaggle copy listed in the official README
-    kaggle_input: /kaggle/input/smoke-fire-detection-yolo
+    # Mount path seen on Kaggle (Nov 2026). The code also tries /kaggle/input/<slug> (older layout).
+    kaggle_input: /kaggle/input/datasets/sayedgamal99/smoke-fire-detection-yolo
+    # data.yaml: names ['smoke', 'fire'] -> smoke = class 0; train 14122 / val 3099 / test 4306 (official test)
     official_page: https://github.com/gaiasd/DFireDataset
     official_download: https://1drv.ms/f/c/c0bd25b6b048b01d/Ema8FFze8mFIlM1Hn81BUUgBE3vnnmK4SQxybS-nHRt2pA?e=6rk0aN
     licence: see official page (cite the D-Fire paper)
@@ -50,7 +52,7 @@ datasets:
     description: Next Day Wildfire Spread (Achref, M6)
     source: kaggle
     handle: fantineh/next-day-wildfire-spread
-    kaggle_input: /kaggle/input/next-day-wildfire-spread
+    kaggle_input: /kaggle/input/datasets/fantineh/next-day-wildfire-spread
 
   mesogeos:
     description: Mesogeos code + download instructions (Achref, Stage 2)

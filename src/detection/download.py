@@ -109,11 +109,28 @@ def _mark_done(dest: Path, spec: dict) -> None:
 
 
 # ------------------------------------------------------------------ sources
+KAGGLE_INPUT = Path("/kaggle/input")
+
+
+def kaggle_mount_candidates(spec: dict, root: Path | None = None) -> list[Path]:
+    """Every place Kaggle may mount an attached dataset, most specific first.
+
+    Kaggle changed its layout: new notebooks mount '<owner>/<slug>' under
+    /kaggle/input/datasets/, older ones mount '<slug>' directly under /kaggle/input/.
+    Trying both keeps the code working whatever the notebook's age.
+    """
+    root = KAGGLE_INPUT if root is None else root  # read at call time, not at import time
+    owner, slug = spec["handle"].split("/", 1)
+    explicit = spec.get("kaggle_input") or []
+    explicit = [explicit] if isinstance(explicit, str) else explicit
+    return [Path(p) for p in explicit] + [root / "datasets" / owner / slug, root / slug]
+
+
 def fetch_kaggle(name: str, spec: dict, dest: Path) -> Path:
-    """Kaggle dataset: use the attached copy on Kaggle, else download with kagglehub."""
-    attached = spec.get("kaggle_input")
-    if attached and Path(attached).exists():
-        return Path(attached)  # read-only input, nothing to copy
+    """Kaggle dataset: use the attached (mounted) copy if any, else download with kagglehub."""
+    for candidate in kaggle_mount_candidates(spec):
+        if candidate.exists():
+            return candidate  # read-only input, nothing to copy or download
     import kagglehub  # credentials: ~/.kaggle/kaggle.json or KAGGLE_USERNAME / KAGGLE_KEY
 
     return Path(kagglehub.dataset_download(spec["handle"], output_dir=str(dest)))

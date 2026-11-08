@@ -91,3 +91,15 @@ def test_http_tgz_download_extract_manifest_and_skip(tmp_path, http_server):
 def test_unknown_dataset_name(tmp_path):
     with pytest.raises(KeyError, match="Unknown dataset"):
         dl.download(["does_not_exist"], tmp_path)
+
+
+def test_kaggle_finds_new_and_old_mount_layouts(tmp_path, monkeypatch):
+    # New Kaggle layout: /kaggle/input/datasets/<owner>/<slug> (seen on Kaggle, Nov 2026)
+    spec = {"handle": "sayedgamal99/smoke-fire-detection-yolo"}
+    cands = dl.kaggle_mount_candidates(spec, root=tmp_path)
+    assert cands == [tmp_path / "datasets" / "sayedgamal99" / "smoke-fire-detection-yolo",
+                     tmp_path / "smoke-fire-detection-yolo"]
+    new = cands[0]
+    new.mkdir(parents=True)
+    monkeypatch.setattr(dl, "KAGGLE_INPUT", tmp_path)
+    assert dl.fetch_kaggle("dfire", spec, tmp_path / "dl") == new  # no download attempted
