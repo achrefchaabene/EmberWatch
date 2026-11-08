@@ -194,3 +194,15 @@ Ce ne sont pas des copies. **Décision : garder le test officiel D-Fire** (4 306
 mAP soit comparable aux articles, et écrire la limite dans le rapport : le modèle a vu ces arrière-plans,
 donc le mAP D-Fire surestime un peu la généralisation à de nouvelles caméras. La généralisation est
 mesurée ailleurs : HPWREN regroupé par scène, puis FIgLib sur caméras jamais vues (CDC §11).
+
+**Premier essai de regroupement (seuil 8) : un groupe géant.** Résultat Kaggle : 9 groupes, dont un
+de 468 images (63 % de HPWREN), par effet de chaîne (A ressemble à B, B à C → A, B, C ensemble).
+Découpé « 10 % des groupes », cela donnait HPWREN : 237 train / 468 val / 32 test — trop peu de
+domaine cible à l'entraînement et un test inutilisable. **Corrections :**
+1. `group_split` vise un pourcentage d'**images** (pas de groupes) ; un groupe qui dépasserait
+   l'objectif de val/test de plus de 50 % va en train.
+2. Cellule 4b : le seuil est **choisi sur les données** — on garde le seuil le plus large
+   (le plus prudent contre les fuites) dont le plus gros groupe reste ≤ 30 % de HPWREN.
+   Un seuil trop bas coupe une même scène en plusieurs groupes (risque de fuite) : la cellule 6
+   (quasi-doublons entre splits après préparation) sert de contrôle final.
+3. `split_report.json → per_source_splits` montre combien d'images HPWREN chaque split contient.

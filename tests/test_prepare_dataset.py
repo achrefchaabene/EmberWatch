@@ -91,3 +91,21 @@ def test_hpwren_random_names_are_grouped_by_scene(tmp_path):
             split_of_scene.setdefault(scene_of[f.stem], set()).add(split)
     assert all(len(s) == 1 for s in split_of_scene.values())  # no scene crosses splits
     assert report["leakage"]["leakage_free"]
+
+
+def test_group_split_balances_images_and_keeps_giant_group_in_train():
+    """Real case seen on Kaggle: 737 HPWREN images in 9 groups, one of 468 (63 %).
+    Splitting by group COUNT sent the giant group to val and left 32 test images."""
+    from src.detection.prepare_dataset import Sample, group_split
+
+    sizes = [468, 60, 50, 40, 35, 30, 24, 20, 10]  # = 737 images
+    samples = [Sample(image=Path(f"g{g}_{i}.jpg"), label=None, source="hpwren", orig_split=None, event=f"g{g}")
+               for g, n in enumerate(sizes) for i in range(n)]
+    for seed in range(20):  # must hold whatever the shuffle order
+        parts = group_split(samples, val=0.1, test=0.1, seed=seed)
+        giant_split = {s.event for s in parts["train"]}
+        assert "g0" in giant_split  # the giant group never becomes val or test
+        for split in ("val", "test"):
+            assert 0.05 * 737 <= len(parts[split]) <= 0.15 * 737 + 1  # ~10 % of IMAGES
+        events = {k: {s.event for s in v} for k, v in parts.items()}
+        assert not (events["train"] & events["val"]) and not (events["train"] & events["test"])

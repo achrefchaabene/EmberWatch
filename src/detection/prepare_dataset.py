@@ -174,19 +174,33 @@ def group_by_similarity(samples: list[Sample], max_hamming: int = 8) -> dict:
 
 # -------------------------------------------------------------------- splits
 def group_split(samples: list[Sample], val: float, test: float, seed: int) -> dict[str, list[Sample]]:
-    """Split by event group so no event crosses splits."""
+    """Split whole groups (events / look-alike scenes) so no group crosses splits.
+
+    Targets are counted in IMAGES, not in groups: with unequal groups, "10 % of the
+    groups" can mean 1 % or 60 % of the images. Groups are visited in a seeded random
+    order and placed in test, then val, until each reaches its image target; a group
+    that would overshoot a target by more than 50 % goes to train instead (a giant
+    look-alike group must never become the whole test set).
+    """
     groups: dict[str, list[Sample]] = defaultdict(list)
-    for s in samples:
-        groups[s.event].append(s)
+    for smp in samples:
+        groups[smp.event].append(smp)
     keys = sorted(groups)
     random.Random(seed).shuffle(keys)
-    n = len(keys)
-    n_test, n_val = round(n * test), round(n * val)
-    if n >= 3:  # keep at least one event in a requested split (fraction > 0) when possible
-        n_test = max(1, n_test) if test > 0 else 0
-        n_val = max(1, n_val) if val > 0 else 0
-    parts = {"test": keys[:n_test], "val": keys[n_test : n_test + n_val], "train": keys[n_test + n_val :]}
-    return {split: [s for k in ks for s in groups[k]] for split, ks in parts.items()}
+    total = len(samples)
+    targets = {"test": test * total, "val": val * total}
+    parts: dict[str, list[Sample]] = {"train": [], "val": [], "test": []}
+    for key in keys:
+        size = len(groups[key])
+        dest = "train"
+        for split in ("test", "val"):
+            room = targets[split] - len(parts[split])
+            # take the group if the split still needs images and the group does not overshoot too much
+            if room > 0 and len(parts[split]) + size <= max(1.5 * targets[split], 1):
+                dest = split
+                break
+        parts[dest] += groups[key]
+    return parts
 
 
 def split_dfire(samples: list[Sample], val: float, seed: int) -> dict[str, list[Sample]]:
@@ -376,6 +390,7 @@ def build(dfire: Path | None, hpwren: Path | None, out: Path, val: float, test: 
             stats.update(write_split(split, [s], sid, out, copy, max_side))  # update keeps zero counts
         report["splits"][split] = dict(stats)
 
+    report["per_source_splits"] = {split: dict(Counter(smp.source for smp, _ in pairs)) for split, pairs in merged.items()}
     report["leakage"] = leakage_report({k: [s for s, _ in v] for k, v in merged.items()})
     # Ultralytics dataset file: one class, paths relative to this folder.
     (out / "data.yaml").write_text(
