@@ -162,3 +162,35 @@ Pour un CNN moderne comme YOLO, la règle est : **presque pas de prétraitement,
 - La cellule de décision du notebook a été exécutée sur de vrais rapports EDA.
 
 **Pas encore vérifié** (nécessite Internet + GPU, donc Kaggle) : le téléchargement réel depuis Kaggle et Roboflow, et le mAP réel. Les identifiants Roboflow (`brad-dwyer/wildfire-smoke` v1) sont ceux de la page publique ; si Roboflow refuse, ouvre la page du dataset → *Download* → *Show download code* et recopie `workspace`, `project`, `version` dans `configs/datasets.yaml`.
+
+---
+
+## 8. Résultats de l'étude sur les vraies données (Kaggle, 8 novembre 2026)
+
+Échantillon uniforme de 5 000 images par source (`src/detection/eda.py`).
+
+| Mesure | D-Fire | HPWREN (Roboflow) | Décision |
+|---|---|---|---|
+| Petites boîtes (< 32 px) | 19 % | 16 % | < 30 % → `imgsz=640` ; SAHI gardé à l'inférence (vraies images de tours en 3072 px) |
+| Côté long médian | 1088 px | 640 px | Pas de redimensionnement hors-ligne (HPWREN déjà réduit par Roboflow) |
+| Niveaux de gris | 5 % | 12 % | `ToGray` p = 0,12 (domaine cible = caméras de tours) |
+| Images sombres | 20 % | 0 % | Luminosité ±20 %, `hsv_v=0.4` ; nuit = mode d'échec à documenter côté tours |
+| Images floues | 12 % | 0 % | Flou léger gardé (p = 0,05, noyau 3) |
+| Sans fumée | 46 % | 0 % | HPWREN n'a **aucun** négatif : priorité M4 = négatifs FIgLib avant ignition |
+| Lignes invalides | 3 | 0 | Écartées par `prepare_dataset` |
+| Quasi-doublons entre splits | 163 groupes | 65 groupes | Voir ci-dessous |
+
+**HPWREN — noms sans identifiant de feu.** Les fichiers Roboflow ont des identifiants aléatoires
+(`ck0k99e6p79go0944lmxivkmv_jpeg.rf.<hash>.jpg`) : le découpage « par feu » à partir du nom devenait
+un tirage au hasard, et des images de la même caméra à quelques minutes d'écart tombaient en train
+et en test. **Correction :** quand chaque nom est unique, `prepare_dataset` regroupe les images par
+**ressemblance visuelle** (empreinte dHash, ≤ 8 bits différents sur 64, union-find) et répartit les
+groupes entiers. Le rapport `split_report.json → sources.hpwren.grouping` donne le nombre de groupes
+et la taille du plus gros (s'il dépasse ~30 % des images, baisser `--similarity-hamming`).
+
+**D-Fire — même caméra fixe, dates différentes.** Inspection visuelle des groupes signalés : même
+point de vue (« Camera0001 »), mais jours différents (ex. 17 et 22 oct. 2019 ; 11, 12, 13 juil. 2020).
+Ce ne sont pas des copies. **Décision : garder le test officiel D-Fire** (4 306 images) pour que le
+mAP soit comparable aux articles, et écrire la limite dans le rapport : le modèle a vu ces arrière-plans,
+donc le mAP D-Fire surestime un peu la généralisation à de nouvelles caméras. La généralisation est
+mesurée ailleurs : HPWREN regroupé par scène, puis FIgLib sur caméras jamais vues (CDC §11).

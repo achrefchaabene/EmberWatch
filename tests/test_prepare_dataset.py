@@ -58,3 +58,36 @@ def test_build_keeps_smoke_only_and_is_leakage_free(tmp_path):
     assert (out / "labels" / "test" / "dfire__t0.txt").exists()
     assert "names:\n  0: smoke" in (out / "data.yaml").read_text()
     assert json.loads((out / "split_report.json").read_text())["leakage"]["leakage_free"]
+
+
+def test_hpwren_random_names_are_grouped_by_scene(tmp_path):
+    """Roboflow names (random ids) carry no fire event: frames of the same camera scene
+    must still land in ONE split, and different scenes must not be merged."""
+    root, out = tmp_path / "hpwren", tmp_path / "out"
+    rng = np.random.default_rng(1)
+    (root / "train" / "images").mkdir(parents=True)
+    (root / "train" / "labels").mkdir(parents=True)
+    (root / "data.yaml").write_text("names: ['smoke']\n")
+    scene_of = {}
+    for scene in range(5):
+        # Each scene = its own random landscape (distinct fingerprints between scenes)
+        base = rng.integers(0, 256, (12, 16, 3), dtype=np.uint8).repeat(20, axis=0).repeat(20, axis=1)
+        for frame in range(4):
+            img = base.copy()
+            img[40:60, 100 + 10 * frame:120 + 10 * frame] = 230  # small plume drifting = same scene
+            name = "ck" + "".join(rng.choice(list("abcdefghij0123456789"), 20)) + "_jpeg.rf.0f3a"
+            Image.fromarray(img).save(root / "train" / "images" / f"{name}.jpg")
+            (root / "train" / "labels" / f"{name}.txt").write_text("0 0.5 0.2 0.1 0.1\n")
+            scene_of[f"hpwren__{name}"] = scene
+
+    report = build(None, root, out, val=0.2, test=0.2, seed=0, copy=True)
+
+    grouping = report["sources"]["hpwren"]["grouping"]
+    assert grouping["method"].startswith("visual similarity")
+    assert grouping["groups"] == 5  # 5 scenes found, none merged
+    split_of_scene: dict[int, set] = {}
+    for split in ("train", "val", "test"):
+        for f in (out / "labels" / split).glob("*.txt"):
+            split_of_scene.setdefault(scene_of[f.stem], set()).add(split)
+    assert all(len(s) == 1 for s in split_of_scene.values())  # no scene crosses splits
+    assert report["leakage"]["leakage_free"]
